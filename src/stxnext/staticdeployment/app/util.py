@@ -163,6 +163,9 @@ class StaticDeploymentUtils(object):
             section=section)
         self.additional_directories = self.config.get_as_list(
             'additional-directories', section=section)
+        self.excluded_content_directories = self.config.get_as_list(
+            'excluded-content-directories', section=section)
+
         # params with default values
         # boolean params
         self.relative_links = self.config.getboolean(section,
@@ -422,8 +425,20 @@ class StaticDeploymentUtils(object):
                          effectiveRange = DateTime(),
                          )
         portal_syndication = getToolByName(self.context, 'portal_syndication')
-        site_path = '/'.join(self.context.getPhysicalPath())
+        site_parts = self.context.getPhysicalPath()
+        site_path = '/'.join(site_parts)
         for brain in brains:
+            # check path not in excluded set
+            if self.excluded_content_directories:
+                brain_parts = brain.getPath().split('/')[len(site_parts):]
+                skip = False
+                for path in self.excluded_content_directories:
+                    path_parts = path.strip('/').split('/')
+                    if path_parts == brain_parts[:len(path_parts)]:
+                        skip = True
+                        break
+                if skip:
+                    continue
             if not brain.review_state or \
                     brain.review_state in self.deployable_review_states:
                 obj = brain.getObject()

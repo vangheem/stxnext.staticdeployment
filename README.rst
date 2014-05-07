@@ -86,6 +86,9 @@ The configuration is stored in the INI file. The default configuration is contai
 ``deployable-review-states`` (list)
     Only pages with review states listed here will be deployed. Default: `published`
 
+``excluded-content-directories`` (list)
+    Content directories that should be excluded from the export. For example: `/news`
+
 
 Usage
 =====
