@@ -77,6 +77,9 @@ The configuration is stored in the INI file. The default configuration is contai
 ``additional-files`` (list)
     Other files to deploy. For example: `sitemap.xml.gz`
 
+``additional-directories`` (list)
+    Other folders of resoureces to deploy For example: `++resource++myfolder`
+
 ``additional-pages`` (list)
     Other pages that should be deployed. For example: `sitemap`
     

@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from OFS.interfaces import IFolder
+import shutil
 import os, re, logging, inspect, traceback
 from inspect import ismethod, isfunction
 from AccessControl.PermissionRole import rolesForPermissionOn
@@ -13,10 +14,17 @@ from urlparse import urlsplit, urlparse
 
 from zope.component import getMultiAdapter, queryMultiAdapter, getAdapters
 from zope.component.interfaces import ComponentLookupError
+
 try:
-    from zope.app.publisher.interfaces import IResource
+    # Plone >= v4.3
+    from zope.browserresource.interfaces import IResource
 except ImportError:
-    from zope.component.interfaces import IResource
+    try:
+        # Plone v4.0 to v4.2
+        from zope.app.publisher.interfaces import IResource    
+    except ImportError:
+        # Plone < v4.0
+        from zope.component.interfaces import IResource
 from zope.contentprovider.interfaces import ContentProviderLookupError
 from zope.publisher.interfaces import NotFound
 from zope.publisher.interfaces.browser import IDefaultBrowserLayer
@@ -280,13 +288,13 @@ class StaticDeploymentUtils(object):
         """
         css_tool = getToolByName(context, 'portal_css')
         js_tool = getToolByName(context, 'portal_javascripts')
-        kss_tool = getToolByName(context, 'portal_kss')
+        kss_tool = getToolByName(context, 'portal_kss', None)
         initial_debugmode = (css_tool.getDebugMode(), js_tool.getDebugMode(),
-                kss_tool.getDebugMode())
+                kss_tool and kss_tool.getDebugMode())
         #if DebugMode was enabled, disable it
         if initial_debugmode[0]: css_tool.setDebugMode(False)
         if initial_debugmode[1]: js_tool.setDebugMode(False)
-        if initial_debugmode[2]: kss_tool.setDebugMode(False)
+        if kss_tool and initial_debugmode[2]: kss_tool.setDebugMode(False)
         return initial_debugmode
 
 
@@ -297,11 +305,11 @@ class StaticDeploymentUtils(object):
         """
         css_tool = getToolByName(context, 'portal_css')
         js_tool = getToolByName(context, 'portal_javascripts')
-        kss_tool = getToolByName(context, 'portal_kss')
+        kss_tool = getToolByName(context, 'portal_kss', None)
         # if DebugMode was enabled for resource, enable it
         if initial_debugmode[0]: css_tool.setDebugMode(True)
         if initial_debugmode[1]: js_tool.setDebugMode(True)
-        if initial_debugmode[2]: kss_tool.setDebugMode(True)
+        if kss_tool and initial_debugmode[2]: kss_tool.setDebugMode(True)
 
 
     @staticmethod
@@ -401,6 +409,7 @@ class StaticDeploymentUtils(object):
         # Deploy additional files and pages
         self._deploy_views(self.additional_files, is_page=False)
         self._deploy_views(self.additional_pages, is_page=True)
+        self._deploy_additional_directories(self.additional_directories)
 
         ## Deploy Plone Site
         if self.deploy_plonesite:
@@ -433,6 +442,9 @@ class StaticDeploymentUtils(object):
                         page = '/'.join(obj.getPhysicalPath()) + '/RSS'
                         page = page[len(site_path) + 1:]
                         self._deploy_views([page], is_page=True)
+                except TypeError:
+                    # not a valid syndication
+                    pass
                 except:
                     log.error("error exporting object: %s\n%s" % (
                         '/'.join(obj.getPhysicalPath()),
@@ -444,6 +456,40 @@ class StaticDeploymentUtils(object):
         # update last triggered date info
         settings = IStaticDeployment(self.context)
         settings.last_triggered = unicode(DateTime().strftime('%Y/%m/%d %H:%M:%S'))
+
+
+    def _deploy_additional_directories(self, additional_directories):
+        site_path = urlparse(self.context.portal_url())[2]
+        if site_path != '/':
+            site_path = site_path.strip('/')
+        for path in additional_directories:
+            folder = self.context.restrictedTraverse(str(path), None)
+            if not folder:
+                log.warn('Could not export %s' % path)
+            try:
+                if IResource.providedBy(folder):
+                    fullpath = folder.context.path
+                    destination_path = os.path.join(
+                        self.base_dir, site_path,
+                        '++resource++' + folder.__name__)
+                    if os.path.exists(destination_path):
+                        shutil.rmtree(destination_path)
+                    shutil.copytree(fullpath, destination_path)
+                elif IResourceDirectory.providedBy(folder):
+                    def handleFolder(container, relpath):
+                        for filename in container.listDirectory():
+                            obj = container[filename]
+                            filepath = str(os.path.join(relpath, filename))
+                            if IResourceDirectory.providedBy(obj):
+                                # okay folder, recurse
+                                handleFolder(obj, filepath)
+                            else:
+                                self._deploy_views([filepath], is_page=False)
+                    handleFolder(folder, path)
+                else:
+                    log.warn('Unsupported directory type %s' % path)
+            except AttributeError:
+                log.warn('Not a valid supported directory type %s' % path)
 
 
     def _deploy_registry_files(self, registry_type, resource_name, resource_type):
