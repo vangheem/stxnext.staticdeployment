@@ -21,7 +21,7 @@ try:
 except ImportError:
     try:
         # Plone v4.0 to v4.2
-        from zope.app.publisher.interfaces import IResource    
+        from zope.app.publisher.interfaces import IResource
     except ImportError:
         # Plone < v4.0
         from zope.component.interfaces import IResource
@@ -499,7 +499,8 @@ class StaticDeploymentUtils(object):
                                 # okay folder, recurse
                                 handleFolder(obj, filepath)
                             else:
-                                self._deploy_views([filepath], is_page=False)
+                                self._deploy_views([filepath], is_page=False,
+                                                   omit_transform=True)
                     handleFolder(folder, path)
                 else:
                     log.warn('Unsupported directory type %s' % path)
@@ -554,7 +555,7 @@ class StaticDeploymentUtils(object):
             self._write(filename, content)
 
     @reset_request
-    def _deploy_views(self, views, is_page=False):
+    def _deploy_views(self, views, is_page=False, omit_transform=False):
         """
         Deploy views of context as pages.
         """
@@ -603,7 +604,8 @@ class StaticDeploymentUtils(object):
             path = urlparse(self.context.portal_url())[2]
             filename = '/'.join((path, filename))
             # write view content on the disk
-            self._write(filename, content, fullview_path)
+            self._write(filename, content, fullview_path,
+                        omit_transform=omit_transform)
 
 
     @reset_request
